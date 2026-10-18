@@ -123,7 +123,7 @@ detectors:
   rules: { enabled: true }                 # active only when Stammdaten are supplied
   regex:
     enabled: true
-    entities: [CONTACT_EMAIL, CONTACT_PHONE, CONTACT_FAX, CONTACT_URL, CONTACT_IP, ID, DATE, NAME_EXT]
+    entities: [CONTACT_EMAIL, CONTACT_PHONE, CONTACT_FAX, CONTACT_URL, CONTACT_IP, ID, DATE, AGE, NAME_EXT]
   onnx:
     enabled: true
     model: OpenMed/OpenMed-PII-German-ClinicalE5-Small-33M-v1-onnx-android

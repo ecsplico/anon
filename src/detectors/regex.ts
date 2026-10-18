@@ -15,6 +15,7 @@ export const REGEX_ENTITIES: EntityKind[] = [
   'CONTACT_IP',
   'ID',
   'DATE',
+  'AGE',
   'NAME_EXT'
 ]
 
@@ -32,6 +33,27 @@ const DATES = [
   /\b\d{4}-\d{2}-\d{2}\b/g,
   new RegExp(`(?<![\\p{N}])\\d{1,2}\\.?\\s+(?:${MONTH_ALTERNATION})\\.?\\s+\\d{4}(?![\\p{N}])`, 'gu')
 ]
+
+const AGE_NUM = String.raw`\d{1,3}(?:[;,]\d{1,2})?`
+const AGE_END = String.raw`(?![\p{L}\p{N}_])`
+/**
+ * German age expressions (full expression is the span): `im Alter von 14 Jahren`, `Alter: 14`,
+ * `14 Jahre alt`, `14-jährige`/`14jährig`, `14;3 Jahre`, `14 J.`.
+ */
+const AGE = new RegExp(
+  String.raw`(?<![\p{L}\p{N}_])(?:im\s+)?Alter\s+von\s+${AGE_NUM}\s+(?:Jahre[n]?|J\.?)${AGE_END}` +
+    String.raw`|(?<![\p{L}\p{N}_])Alter\s*:\s*${AGE_NUM}(?:\s*(?:Jahre[n]?|J\.?))?(?![\p{N}]|[.,;]\d)` +
+    String.raw`|(?<![\p{L}\p{N}_]|\p{N}[.,;])(?:` +
+    String.raw`${AGE_NUM}\s+Jahre[n]?\s+alt${AGE_END}` +
+    String.raw`|\d{1,3}-?[Jj]ährig\p{L}*` +
+    String.raw`|\d{1,3}[;,]\d{1,2}\s+Jahre[n]?${AGE_END}` +
+    String.raw`|\d{1,3}\s?J${AGE_END}\.?` +
+    String.raw`)`,
+  'gu'
+)
+/** Words before `N Jahre(n)` / `N J.` that make it a duration (`seit 3 Jahren`), not an age. */
+const DURATION_BEFORE =
+  /(?:^|[^\p{L}])(?:seit|vor|für|nach|innerhalb|über|binnen|während|bis|in\s+den\s+letzten|in\s+den\s+vergangenen)\s+(?:(?:ca\.|etwa|circa|rund|knapp|fast|gut|ungefähr|nunmehr|bereits|mehr\s+als)\s+)*$/iu
 
 /** Surname after Herr/Frau/Hr./Fr. (optionally with Dr./Prof./med.); the title tokens themselves are never matched. */
 const SALUTATION =
@@ -67,6 +89,15 @@ function ibanRanges(masked: string): Range[] {
 
 function ipRanges(masked: string): Range[] {
   return scan(masked, IP).filter(([s, e]) => masked.slice(s, e).split('.').every(o => Number(o) <= 255))
+}
+
+/** `-jährig*`, `… alt` and `Alter …` forms are ages by themselves; bare `N Jahre`/`N J` after a duration word are not. */
+function ageRanges(masked: string): Range[] {
+  return scan(masked, AGE).filter(([s, e]) => {
+    const t = masked.slice(s, e)
+    if (/^Alter|^im\s+Alter|[Jj]ährig|\salt$/u.test(t)) return true
+    return !DURATION_BEFORE.test(masked.slice(Math.max(0, s - 40), s))
+  })
 }
 
 /** Strip sentence punctuation that cannot end a URL. */
@@ -114,6 +145,7 @@ export function regexDetector(opts: { entities?: EntityKind[] } = {}): Detector 
       for (const [s, e] of ibans) add(s, e, 'ID', 1)
       for (const [s, e] of scan(masked, KVNR)) add(s, e, 'ID', 0.7)
       for (const [s, e] of dates) add(s, e, 'DATE', 0.6)
+      for (const [s, e] of ageRanges(masked)) add(s, e, 'AGE', 0.6)
       for (const [s, e] of scan(masked, SALUTATION)) add(s, e, 'NAME_EXT', 0.6)
 
       if (enabled.has('CONTACT_PHONE') || enabled.has('CONTACT_FAX')) {

@@ -57,6 +57,7 @@ export const DEFAULT_CONFIG: AnonConfig = {
         'CONTACT_IP',
         'ID',
         'DATE',
+        'AGE',
         'NAME_EXT',
       ],
     },

@@ -110,6 +110,50 @@ describe('salutation surname', () => {
   })
 })
 
+describe('age', () => {
+  const ages = async (text: string) => found(await run(text), 'AGE')
+
+  test('-jährig forms', async () => {
+    expect(await ages('Die 14-jährige besucht die Schule.')).toEqual(['14-jährige'])
+    expect(await ages('Ein 14-jähriger Patient.')).toEqual(['14-jähriger'])
+    expect(await ages('Bei der 14-jährigen Patientin.')).toEqual(['14-jährigen'])
+    expect(await ages('Sie ist 14jährig.')).toEqual(['14jährig'])
+  })
+
+  test('N Jahre alt and im Alter von', async () => {
+    expect(await ages('Er ist 14 Jahre alt und lebt hier.')).toEqual(['14 Jahre alt'])
+    expect(await ages('Aufnahme im Alter von 14 Jahren.')).toEqual(['im Alter von 14 Jahren'])
+    expect(await ages('Im Alter von 14;3 Jahren erstmals.')).toEqual(['Alter von 14;3 Jahren'])
+    expect(await ages('Alter: 14')).toEqual(['Alter: 14'])
+    expect(await ages('Alter: 14 Jahre, weiblich')).toEqual(['Alter: 14 Jahre'])
+  })
+
+  test('KJP notation and J abbreviation', async () => {
+    expect(await ages('Mia, 14;3 Jahre, kam.')).toEqual(['14;3 Jahre'])
+    expect(await ages('Mia, 14,5 Jahre, kam.')).toEqual(['14,5 Jahre'])
+    expect(await ages('Mia (14 J.) kam.')).toEqual(['14 J.'])
+    expect(await ages('Mia (14 J) kam.')).toEqual(['14 J'])
+    expect(await ages('Mia 14J kam.')).toEqual(['14J'])
+  })
+
+  test('a J followed by letters, durations and dates are not ages', async () => {
+    expect(await ages('14 Jan und 14 Jugendliche')).toEqual([])
+    expect(await ages('Seit 3 Jahren in Behandlung.')).toEqual([])
+    expect(await ages('Vor 2 Jahren begann es, seit ca. 2,5 Jahren.')).toEqual([])
+    expect(await ages('Für 5 Jahre und nach 4 J. wieder.')).toEqual([])
+    expect(await ages('In den letzten 3 Jahren.')).toEqual([])
+    expect(await ages('Am 14.03.2011 und 1,14 J.')).toEqual([])
+    expect(await ages('Alter: 14.03.2011')).toEqual([])
+  })
+
+  test('AGE spans carry kind and score 0.6', async () => {
+    const spans = await run('Die 14-jährige kam.')
+    expect(spans).toHaveLength(1)
+    expect(spans[0]).toMatchObject({ kind: 'AGE', text: '14-jährige', score: 0.6, detector: 'regex' })
+    expect(await run('Die 14-jährige kam.', ['DATE'])).toEqual([])
+  })
+})
+
 describe('options and masking', () => {
   test('entities option restricts recognizers; default list covers all kinds', async () => {
     const text = 'Mail a@example.de am 12.03.2011'
