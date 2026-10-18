@@ -273,13 +273,17 @@ async function packagesInstalled(): Promise<boolean> {
   }
 }
 
-async function llmReachable(baseUrl: string): Promise<boolean> {
+async function llmReachable(baseUrl: string, apiKey?: string): Promise<'yes' | 'no' | 'unauthorized'> {
   try {
     assertLocalUrl(baseUrl)
-    const res = await fetch(`${baseUrl.replace(/\/+$/, '')}/models`, { signal: AbortSignal.timeout(3000) })
-    return res.ok
+    const res = await fetch(`${baseUrl.replace(/\/+$/, '')}/models`, {
+      headers: apiKey ? { authorization: `Bearer ${apiKey}` } : {},
+      signal: AbortSignal.timeout(3000)
+    })
+    if (res.status === 401 || res.status === 403) return 'unauthorized'
+    return res.ok ? 'yes' : 'no'
   } catch {
-    return false
+    return 'no'
   }
 }
 
@@ -303,8 +307,9 @@ program
       if (!llm.enabled) {
         console.log(`llm    ${on(false)}`)
       } else {
-        const ok = await llmReachable(llm.baseUrl)
-        console.log(`llm    ${on(true)}  url=${llm.baseUrl} reachable=${ok ? 'yes' : 'no'}`)
+        const state = await llmReachable(llm.baseUrl, process.env[llm.apiKeyEnv])
+        const hint = state === 'unauthorized' ? ` (API-Key fehlt oder falsch: $${llm.apiKeyEnv})` : ''
+        console.log(`llm    ${on(true)}  url=${llm.baseUrl} reachable=${state}${hint}`)
       }
     }),
   )
