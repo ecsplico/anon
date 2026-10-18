@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
-import { homedir } from 'node:os'
 import path from 'node:path'
+import { expandHome } from '../config.ts'
 import { kindGroup } from '../types.ts'
 import type { EntityKind, Span } from '../types.ts'
 import { alignedPipeline } from './align.ts'
@@ -70,12 +70,6 @@ const MISSING_PACKAGES =
 
 const MODEL_FILE: Record<OnnxVariant, string> = { int8: 'model_int8.onnx', fp16: 'model_fp16.onnx', fp32: 'model.onnx' }
 const MODEL_SIDE_FILES = ['config.json', 'tokenizer.json', 'tokenizer_config.json']
-
-function expandHome(p: string): string {
-  if (p === '~') return homedir()
-  if (p.startsWith('~/')) return path.join(homedir(), p.slice(2))
-  return p
-}
 
 /**
  * `hit` when the model files are on disk under `cacheDir`. Plain fs check: transformers' own

@@ -189,10 +189,11 @@ type Unit = {
 const NEVER = /(?!)/u
 
 function groupSpans(spans: Span[], rules: Rule[]): { units: Unit[]; unitOf: Unit[] } {
-  // Non-rule spans equal to a rule's original (same kind group) reuse that rule's placeholder.
+  // Non-rule spans with exactly a rule's original (same kind group) reuse that rule's placeholder.
+  // Exact text only: a different spelling ("SOMMERFELD") gets its own placeholder so restore stays exact.
   const seed = new Map<string, string>()
   for (const r of rules) {
-    const k = `${kindGroup(r.kind)}|${normalize(r.original)}`
+    const k = `${kindGroup(r.kind)}|${r.original}`
     if (!seed.has(k)) seed.set(k, r.placeholder)
   }
 
@@ -209,7 +210,7 @@ function groupSpans(spans: Span[], rules: Rule[]): { units: Unit[]; unitOf: Unit
       key = `p:${fixed}`
     } else {
       const base = `${kindGroup(s.kind)}|${normalize(s.text)}`
-      const seeded = seed.get(base)
+      const seeded = seed.get(`${kindGroup(s.kind)}|${s.text}`)
       if (seeded) {
         fixed = seeded
         fromRule = true
@@ -320,7 +321,7 @@ export async function anonymize(text: string, opts: AnonymizeOptions): Promise<A
     }
 
     // A given placeholder (rule/manual) cannot be redrawn, and semantic keys are deterministic.
-    const stuck = collided.find(u => u.fixed !== undefined && !(u.fromRule && fakeNames))
+    const stuck = collided.find(u => u.fixed !== undefined && !(u.fromRule && fakeNames && kindGroup(u.kind) === 'NAME'))
     const fatal = style.name === 'semantic' || stuck !== undefined
     if (fatal || attempt >= MAX_ATTEMPTS) {
       const hit = stuck ?? collided[0]

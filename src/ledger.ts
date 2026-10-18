@@ -6,6 +6,7 @@ import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, re
 import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { parse, stringify } from 'yaml'
+import { expandHome } from './config.ts'
 import { STYLE_NAMES, type StyleName } from './placeholders.ts'
 import { ENTITY_KINDS } from './types.ts'
 import type { DetectorName, Entity, EntityKind } from './types.ts'
@@ -28,12 +29,6 @@ export type Ledger = {
 }
 
 const DETECTOR_NAMES: readonly DetectorName[] = ['rules', 'regex', 'onnx', 'llm', 'manual']
-
-/** `~` / `~/…` expanded to the home directory. */
-function expandHome(p: string): string {
-  if (p === '~') return homedir()
-  return p.startsWith('~/') ? join(homedir(), p.slice(2)) : p
-}
 
 export function defaultStoreDir(): string {
   return join(homedir(), '.clinico-anon', 'ledgers')
@@ -153,10 +148,6 @@ function toDetector(raw: unknown): DetectorName {
   return DETECTOR_NAMES.find(d => d === raw) ?? 'manual'
 }
 
-function toStyle(raw: unknown): StyleName {
-  return STYLE_NAMES.find(s => s === raw) ?? 'presidio'
-}
-
 function toEntity(raw: unknown, path: string): Entity {
   if (!raw || typeof raw !== 'object') throw new Error(`Ledger ungültig (${path}): Entität ist kein Objekt`)
   const e = raw as Record<string, unknown>
@@ -184,7 +175,7 @@ export function readLedger(path: string): Ledger {
     key: typeof doc.key === 'string' && doc.key ? doc.key : stem,
     sourceFile: String(doc.source_file ?? ''),
     created: String(doc.created ?? ''),
-    style: toStyle(doc.style),
+    style: STYLE_NAMES.find(s => s === doc.style) ?? 'presidio',
     fakeNames: Boolean(doc.fake_names),
     detectors: Array.isArray(doc.detectors) ? doc.detectors.map(toDetector) : [],
     checksumSource: String(doc.checksum_source ?? ''),

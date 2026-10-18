@@ -102,19 +102,18 @@ function build(name: EvalDetector): Detector {
   }
 }
 
-const instances = new Map<EvalDetector, Detector>(detectorNames.map((n) => [n, cached(build(n))]))
+const built = detectorNames.map((n) => ({ name: n, detector: cached(build(n)) }))
 
-type Setting = { name: string; detectors: EvalDetector[] }
-const settings: Setting[] = detectorNames.map((n) => ({ name: n, detectors: [n] }))
-if (detectorNames.length > 1) settings.push({ name: detectorNames.join('+'), detectors: [...detectorNames] })
+type Setting = { name: string; detectors: Detector[] }
+const settings: Setting[] = built.map((b) => ({ name: b.name, detectors: [b.detector] }))
+if (built.length > 1) settings.push({ name: detectorNames.join('+'), detectors: built.map((b) => b.detector) })
 
 type SettingResult = { name: string; strict: ScoreResult; overlap: ScoreResult }
 const results: SettingResult[] = []
 
 // Review kinds (AGE, PROFESSION, ...) are detected but not replaced; they still count as predictions.
 async function predict(doc: GraSCCoDoc, setting: Setting): Promise<PredSpan[]> {
-  const list = setting.detectors.map((n) => instances.get(n) as Detector)
-  const { spans, review } = await detect(doc.text, { config, detectors: list, markdown: false })
+  const { spans, review } = await detect(doc.text, { config, detectors: setting.detectors, markdown: false })
   return [...spans, ...review].map((s) => ({ start: s.start, end: s.end, kind: s.kind }))
 }
 

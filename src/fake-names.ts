@@ -24,11 +24,11 @@ export type FakeNamesOptions = {
 }
 
 /** Leading tokens kept verbatim; Herr/Frau also fix the gender. */
-const TITLES = new Set([
-  'herr', 'herrn', 'hr.', 'frau', 'fr.', 'dr.', 'prof.', 'med.', 'dent.', 'dipl.-med.', 'pd', 'oa', 'oä'
-])
-const MALE_CUES = new Set(['herr', 'herrn', 'hr.'])
-const FEMALE_CUES = new Set(['frau', 'fr.'])
+const TITLES: Record<string, true> = Object.fromEntries(
+  ['herr', 'herrn', 'hr.', 'frau', 'fr.', 'dr.', 'prof.', 'med.', 'dent.', 'dipl.-med.', 'pd', 'oa', 'oä'].map(t => [t, true as const])
+)
+const MALE_CUES: Record<string, true> = { herr: true, herrn: true, 'hr.': true }
+const FEMALE_CUES: Record<string, true> = { frau: true, 'fr.': true }
 const CUE_BEFORE = /(Herrn?|Hr\.|Frau|Fr\.)\s*$/
 const MAX_DRAWS = 100
 
@@ -66,7 +66,7 @@ export class FakeNames {
   replacement(original: string, before = ''): string {
     const tokens = original.split(/\s+/).filter(Boolean)
     const prefix: string[] = []
-    while (tokens.length > 0 && TITLES.has(tokens[0]!.toLowerCase())) prefix.push(tokens.shift()!)
+    while (tokens.length > 0 && Object.hasOwn(TITLES, tokens[0]!.toLowerCase())) prefix.push(tokens.shift()!)
     if (tokens.length === 0) return original
 
     const cue = this.cue(prefix, before)
@@ -110,10 +110,10 @@ export class FakeNames {
 
   private cue(prefix: string[], before: string): Gender | undefined {
     const lowered = prefix.map(p => p.toLowerCase())
-    if (lowered.some(p => MALE_CUES.has(p))) return 'male'
-    if (lowered.some(p => FEMALE_CUES.has(p))) return 'female'
+    if (lowered.some(p => Object.hasOwn(MALE_CUES, p))) return 'male'
+    if (lowered.some(p => Object.hasOwn(FEMALE_CUES, p))) return 'female'
     const m = CUE_BEFORE.exec(before)
-    if (m) return MALE_CUES.has(m[1]!.toLowerCase()) ? 'male' : 'female'
+    if (m) return Object.hasOwn(MALE_CUES, m[1]!.toLowerCase()) ? 'male' : 'female'
     return undefined
   }
 

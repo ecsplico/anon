@@ -65,10 +65,6 @@ function scan(masked: string, re: RegExp): Range[] {
   return [...masked.matchAll(re)].map(m => [m.index, m.index + m[0].length] as Range)
 }
 
-function digitCount(s: string): number {
-  return s.match(/\d/g)?.length ?? 0
-}
-
 /** IBAN candidates validated by checksum; an over-greedy match is trimmed group by group. */
 function ibanRanges(masked: string): Range[] {
   const out: Range[] = []
@@ -112,7 +108,7 @@ function phoneSpans(masked: string, suppress: Range[]): { start: number; end: nu
   const out: { start: number; end: number; fax: boolean }[] = []
   for (const f of findPhoneNumbersInText(masked, 'DE')) {
     const text = masked.slice(f.startsAt, f.endsAt)
-    if (!text.includes('+') && digitCount(text) < 6) continue
+    if (!text.includes('+') && (text.match(/\d/g)?.length ?? 0) < 6) continue
     if (/^\d+(?:\.\d+){2,}$/.test(text)) continue // dotted numbers: invalid IPs, versions, dates
     if (suppress.some(([s, e]) => f.startsAt < e && s < f.endsAt)) continue
     const context = masked.slice(Math.max(0, f.startsAt - 12), f.startsAt)

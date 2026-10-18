@@ -168,10 +168,6 @@ export function toMapping(rules: Rule[]): { placeholder: string; original: strin
 // ---------------------------------------------------------------------------
 // Anwenden
 
-function globalPattern(p: RegExp): RegExp {
-  return p.global ? new RegExp(p.source, p.flags) : new RegExp(p.source, p.flags + 'g')
-}
-
 export type RuleHit = { start: number; end: number; /** Index into the `rules` array. */ rule: number }
 
 /**
@@ -181,7 +177,8 @@ export type RuleHit = { start: number; end: number; /** Index into the `rules` a
 export function findRuleHits(text: string, rules: Rule[]): RuleHit[] {
   const cands: RuleHit[] = []
   rules.forEach((r, i) => {
-    const re = globalPattern(r.pattern)
+    // matchAll needs the global flag; a fresh copy also keeps lastIndex state out of the rule.
+    const re = new RegExp(r.pattern.source, r.pattern.global ? r.pattern.flags : `${r.pattern.flags}g`)
     for (const m of text.matchAll(re)) {
       if (m[0].length === 0) continue
       cands.push({ start: m.index!, end: m.index! + m[0].length, rule: i })

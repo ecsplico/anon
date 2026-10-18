@@ -182,16 +182,13 @@ program
       const dir = ledgerDir(config)
       const anonText = readFileSync(anonFile, 'utf8')
 
-      let path: string | null
-      if (opts.key) {
-        path = ledgerPath(opts.key, dir)
-        if (!existsSync(path)) throw new Error(`Ledger nicht gefunden: ${path}`)
-      } else {
-        path = findLedger(anonText, dir)
-        if (!path) throw new Error(`Kein Ledger zu dieser Datei gefunden (${dir}); mit -k <key> angeben`)
+      let ledger: Ledger
+      if (opts.key) ledger = ledgerByKey(opts.key, dir)
+      else {
+        const found = findLedger(anonText, dir)
+        if (!found) throw new Error(noLedger(dir))
+        ledger = readLedger(found)
       }
-
-      const ledger = readLedger(path)
       if (opts.verify && sha256(anonText) !== ledger.checksumAnon) {
         console.error('Warnung: Prüfsumme der anonymisierten Datei weicht vom Ledger ab (Datei wurde nach der Anonymisierung geändert).')
       }
@@ -208,17 +205,21 @@ program
 
 // ---- inspect --------------------------------------------------------------------------------
 
+const noLedger = (dir: string) => `Kein Ledger zu dieser Datei gefunden (${dir}); mit -k <key> angeben`
+
+function ledgerByKey(key: string, dir: string): Ledger {
+  const path = ledgerPath(key, dir)
+  if (!existsSync(path)) throw new Error(`Ledger nicht gefunden: ${path}`)
+  return readLedger(path)
+}
+
 function resolveLedger(arg: string, dir: string): Ledger {
-  if (KEY_RE.test(arg)) {
-    const path = ledgerPath(arg, dir)
-    if (!existsSync(path)) throw new Error(`Ledger nicht gefunden: ${path}`)
-    return readLedger(path)
-  }
+  if (KEY_RE.test(arg)) return ledgerByKey(arg, dir)
   if (!existsSync(arg)) throw new Error(`Weder Ledger-Key noch Datei: ${arg}`)
   const byChecksum = findLedger(readFileSync(arg, 'utf8'), dir)
   if (byChecksum) return readLedger(byChecksum)
   if (/\.ya?ml$/i.test(arg)) return readLedger(arg)
-  throw new Error(`Kein Ledger zu dieser Datei gefunden (${dir})`)
+  throw new Error(noLedger(dir))
 }
 
 program

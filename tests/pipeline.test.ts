@@ -204,6 +204,21 @@ describe('overlaps', () => {
     expect(res.entities[0]).toMatchObject({ placeholder: '{{name}}', kind: 'NAME_PATIENT', detector: 'rules' })
   })
 
+  test('a different spelling of a rule original gets its own placeholder and restores exactly', async () => {
+    const t = 'Sommerfeld kam. SOMMERFELD ging.'
+    const res = await anonymize(t, {
+      config: config('semantic'),
+      stammdaten: S,
+      detectors: [fake('onnx', [{ text: 'SOMMERFELD', kind: 'NAME_EXT' }])]
+    })
+    expect(restore(res.text, res.entities)).toBe(t)
+    expect(res.text.startsWith('{{nachname}} kam. ')).toBe(true)
+    expect(res.text).not.toBe('{{nachname}} kam. {{nachname}} ging.')
+    const variant = res.entities.find(e => e.original === 'SOMMERFELD')
+    expect(variant).toBeDefined()
+    expect(variant!.placeholder).not.toBe('{{nachname}}')
+  })
+
   test('the longer span wins regardless of detector priority', async () => {
     const res = await detect('Frau Dr. Berger-Lenz kam.', {
       config: config('presidio'),
@@ -233,7 +248,7 @@ describe('overlaps', () => {
     expect(res2.spans.map(s => s.text)).toEqual(['Anna Berger'])
   })
 
-  test('semantic: rule placeholders, numbered extras, reuse of a rule original, residual', async () => {
+  test('semantic: rule placeholders, numbered extras, another spelling of a rule original, residual', async () => {
     const t = 'Lena kam mit Katrin zu Dr. Berger. Später sprach Dr. Berger mit Lena. Lenas Weg in Lindenau: Sommerfelder Straße. SOMMERFELD rief an.'
     const res = await anonymize(t, {
       config: config('semantic'),
@@ -245,10 +260,10 @@ describe('overlaps', () => {
       ])]
     })
     expect(res.text).toBe(
-      '{{vorname}} kam mit {{km_vorname}} zu Dr. {{person1}}. Später sprach Dr. {{person1}} mit {{vorname}}. {{vorname}}s Weg in {{wohnort}}: Sommerfelder Straße. {{nachname}} rief an.'
+      '{{vorname}} kam mit {{km_vorname}} zu Dr. {{person1}}. Später sprach Dr. {{person1}} mit {{vorname}}. {{vorname}}s Weg in {{wohnort}}: Sommerfelder Straße. {{person2}} rief an.'
     )
-    // 'SOMMERFELD' is not matched by the case-sensitive rule but equals its original (same group): rule placeholder, no {{person2}}
-    expect(res.entities.map(e => e.placeholder)).toEqual(['{{vorname}}', '{{km_vorname}}', '{{person1}}', '{{wohnort}}', '{{nachname}}'])
+    // 'SOMMERFELD' is not matched by the case-sensitive rule and differs in spelling from its original: own placeholder
+    expect(res.entities.map(e => e.placeholder)).toEqual(['{{vorname}}', '{{km_vorname}}', '{{person1}}', '{{wohnort}}', '{{person2}}'])
     expect(res.entities.find(e => e.placeholder === '{{person1}}')?.occurrences).toBe(2)
     expect(res.detectors).toEqual(['rules', 'onnx'])
     expect(res.residual.map(r => r.term)).toEqual(['Sommerfelder'])
@@ -324,6 +339,15 @@ describe('round-trip guard', () => {
       detectors: [],
       manual: [{ text: 'Berger', kind: 'NAME_EXT', placeholder: '{{x}}' }]
     })).rejects.toThrow('{{x}}')
+  })
+
+  test('a non-name rule placeholder under fakeNames cannot be redrawn: fails fast naming it', async () => {
+    const S: Stammdaten = { vorname: 'Lena', nachname: 'Sommerfeld', wohnort: 'Lindenau' }
+    await expect(anonymize('Notiz {{wohnort}} zu Lindenau.', {
+      config: config('presidio', { fakeNames: true }),
+      stammdaten: S,
+      detectors: []
+    })).rejects.toThrow('Platzhalter-Kollision: {{wohnort}}')
   })
 })
 
