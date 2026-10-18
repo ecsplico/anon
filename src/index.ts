@@ -28,3 +28,43 @@ export type { CreateStyleOptions, PlaceholderStyle, StyleName } from './placehol
 
 export { addCandidate, applyRules, buildRules, residualScan, toMapping } from './rules.ts'
 export type { Candidate } from './rules.ts'
+
+export type { DetectContext, Detector } from './detectors/types.ts'
+export { REGEX_ENTITIES, regexDetector } from './detectors/regex.ts'
+export { ONNX_DEFAULTS, onnxCacheStatus, onnxDetector } from './detectors/onnx.ts'
+export type { OnnxDetectorOptions, OnnxOptions, OnnxVariant } from './detectors/onnx.ts'
+export {
+  NerResponseSchema,
+  assertLocalUrl,
+  extractJson,
+  findCandidates,
+  llmDetector,
+  openAiCompatibleChat,
+  toRules
+} from './detectors/llm.ts'
+export type {
+  AcceptedCandidate,
+  FindCandidatesOptions,
+  LlmDetectorOptions,
+  NerCandidate,
+  NerChat,
+  NerKind,
+  NerPrompt,
+  OpenAiCompatibleChatOptions
+} from './detectors/llm.ts'
+
+export { overlaps, protectedSpans } from './markdown.ts'
+export type { Range } from './markdown.ts'
+export { FakeNames } from './fake-names.ts'
+export type { FakeNamesOptions, FakerLike } from './fake-names.ts'
+export {
+  LEDGER_VERSION,
+  findLedger,
+  ledgerPath,
+  readLedger,
+  saveLedger,
+  sha256,
+  storeDir
+} from './ledger.ts'
+export type { Ledger, SaveLedgerInput } from './ledger.ts'
+
