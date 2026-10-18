@@ -125,7 +125,8 @@ function normalize(raw: string, kind: NerKind): string {
   return s.trim()
 }
 
-function snippet(text: string, index: number, length: number): string {
+/** Context of at most 80 characters around `text[index, index+length)`, widened to word boundaries, whitespace collapsed. */
+export function contextSnippet(text: string, index: number, length: number): string {
   const max = 80
   const half = Math.max(0, Math.floor((max - length) / 2))
   let from = Math.max(0, index - half)
@@ -197,7 +198,7 @@ export async function findCandidates(text: string, opts: FindCandidatesOptions):
     for (const m of masked.matchAll(exact)) {
       count++
       if (contexts.length < 3) {
-        const c = snippet(text, m.index!, m[0].length)
+        const c = contextSnippet(text, m.index!, m[0].length)
         if (!contexts.includes(c)) contexts.push(c)
       }
     }

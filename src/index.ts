@@ -36,6 +36,7 @@ export type { OnnxDetectorOptions, OnnxOptions, OnnxVariant } from './detectors/
 export {
   NerResponseSchema,
   assertLocalUrl,
+  contextSnippet,
   extractJson,
   findCandidates,
   llmDetector,

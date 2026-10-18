@@ -207,7 +207,7 @@ restore(result.text, result.entities) === text
 |`restore(text, entities)`|placeholder → original (first mapping per placeholder wins, longest placeholder first)|
 |`loadConfig({ path?, cwd?, env? })`, `applyCliOverrides(config, flags)`|config layers; flag mapping|
 |`buildRules(stammdaten)`, `applyRules(text, rules)`, `addCandidate(rules, candidate, style)`, `residualScan(text, stammdaten, style)`, `toMapping(rules)`|Stammdaten rule layer with semantic placeholders|
-|`findCandidates(text, { chat, placeholderPattern })`, `toRules(...)`, `openAiCompatibleChat(opts)`|LLM NER; `chat` is injected, so the caller owns transport and logging|
+|`findCandidates(text, { chat, placeholderPattern })`, `toRules(...)`, `openAiCompatibleChat(opts)`, `contextSnippet(text, index, length)`|LLM NER; `chat` is injected, so the caller owns transport and logging; `contextSnippet` builds the review contexts shown for each candidate|
 |`regexDetector`, `onnxDetector`, `llmDetector`|individual detectors (`Detector.detect(text, { masked })`)|
 |`saveLedger`, `findLedger`, `readLedger`, `sha256`|ledger store|
 |`semanticStyle`, `presidioStyle`, `llmGuardStyle`, `gemtexStyle`, `getStyle`|placeholder styles|
