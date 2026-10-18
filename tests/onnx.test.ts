@@ -297,7 +297,7 @@ describe('loading', () => {
       loadOnnxModel: async (id, o) => {
         loads++
         expect(id).toBe(ONNX_DEFAULTS.model)
-        expect(o).toEqual({ variant: 'int8', device: 'cpu', localFilesOnly: false, runtime: expect.anything() })
+        expect(o).toEqual({ variant: ONNX_DEFAULTS.variant, device: 'cpu', localFilesOnly: false, runtime: expect.anything() })
         return model
       },
       extractPii: async (_t, o) => { seen.push(o?.pipeline); return [] },

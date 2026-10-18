@@ -22,7 +22,7 @@ anon --help
 npm i @ecsplico/anon           # as a library
 ```
 
-Node ≥ 22. The first run with the `onnx` detector downloads the default model (about 70 MB, INT8) to `~/.cache/ecsplico-anon/models`; later runs work offline (`localFilesOnly: true` forbids the download).
+Node ≥ 22. The first run with the `onnx` detector downloads the default model (about 270 MB, FP16) to `~/.cache/ecsplico-anon/models`; later runs work offline (`localFilesOnly: true` forbids the download).
 
 ## CLI
 
@@ -108,7 +108,7 @@ Prints the effective configuration (files plus flags) as YAML, preceded by `# so
 ```text
 rules  enabled  (nur mit --stammdaten)
 regex  enabled
-onnx   enabled  model=OpenMed/OpenMed-PII-German-ClinicalE5-Small-33M-v1-onnx-android cache=hit
+onnx   enabled  model=OpenMed/OpenMed-PII-German-SuperClinical-Small-44M-v1-onnx-android cache=hit
 llm    enabled  url=http://127.0.0.1:8000/v1 reachable=yes
 ```
 
@@ -126,10 +126,10 @@ detectors:
     entities: [CONTACT_EMAIL, CONTACT_PHONE, CONTACT_FAX, CONTACT_URL, CONTACT_IP, ID, DATE, AGE, NAME_EXT]
   onnx:
     enabled: true
-    model: OpenMed/OpenMed-PII-German-ClinicalE5-Small-33M-v1-onnx-android
-    variant: int8                          # int8 | fp16 | fp32
+    model: OpenMed/OpenMed-PII-German-SuperClinical-Small-44M-v1-onnx-android
+    variant: fp16                          # int8 | fp16 | fp32
     device: cpu                            # cpu | webgpu
-    threshold: 0.5
+    threshold: 0.3
     chunkChars: 900                        # characters per model call (models truncate at 512 tokens)
     localFilesOnly: false                  # true: never download
     cacheDir: ~/.cache/ecsplico-anon/models
@@ -167,13 +167,17 @@ GeMTeX scheme: `NAME_PATIENT`, `NAME_RELATIVE`, `NAME_DOCTOR`, `NAME_EXT`, `NAME
 
 ## Model choice (`onnx`)
 
-|Model (`detectors.onnx.model`)|Size|Use|
-|---|---|---|
-|`OpenMed/OpenMed-PII-German-ClinicalE5-Small-33M-v1-onnx-android`|≈70 MB INT8|default; fast, runs anywhere|
-|`OpenMed/OpenMed-PII-German-SuperClinical-Base-184M-v1`|184M|more accurate|
-|`OpenMed/OpenMed-PII-German-SuperClinical-Large-434M-v1`|434M|best F1 on the AI4Privacy German subset (0.976)|
+Measured on GraSCCo_PII_V2 (see Evaluation), `onnx` alone, threshold 0.3, overlap recall in %:
 
-Only `-onnx-android` repositories load through OpenMed's ONNX loader directly; other repositories need an `onnx/model.onnx` export. The published F1 numbers come from synthetic, non-clinical text. Measure recall on clinical text before trusting a model, see Evaluation.
+|Model (`detectors.onnx.model`, all `…-v1-onnx-android`)|Variant|File|NAME|DATE|LOCATION|Total|Corpus time|
+|---|---|---:|---:|---:|---:|---:|---:|
+|`OpenMed/OpenMed-PII-German-SuperClinical-Small-44M` (default)|fp16|270 MB|95.7|75.9|90.1|81.3|15 s|
+|`OpenMed/OpenMed-PII-German-SuperClinical-Small-44M`|int8|445 MB|95.7|71.6|87.2|78.6|10 s|
+|`OpenMed/OpenMed-PII-German-SuperClinical-Base-184M`|fp16|352 MB|94.4|75.2|89.0|80.8|28 s|
+|`OpenMed/OpenMed-PII-German-SuperClinical-Large-434M`|fp16|831 MB|96.0|75.3|77.9|79.8|79 s|
+|`OpenMed/OpenMed-PII-German-ClinicalE5-Small-33M`|int8|66 MB|60.8|24.4|11.0|30.5|8 s|
+
+`SuperClinical-Base-184M` with `int8` returns no spans (broken model file); use `fp16`. ClinicalE5 models label German dates as IP addresses. Only `-onnx-android` repositories load through OpenMed's ONNX loader directly; other repositories need an `onnx/model.onnx` export.
 
 ## Library
 
@@ -226,8 +230,20 @@ restore(result.text, result.entities) === text
 `scripts/eval-grascco.ts` measures strict entity-level precision and recall per kind group on the synthetic GraSCCo_PII corpus (Zenodo record 15747389, CC-BY-4.0). Download it manually into `eval/corpus/` (git-ignored), then:
 
 ```sh
-bun scripts/eval-grascco.ts --corpus eval/corpus --detectors regex,onnx
+bun scripts/eval-grascco.ts --corpus eval/corpus --detectors regex,onnx --skip-labels NAME_TITLE
 ```
+
+Results 2026-10-18 (63 documents, 1297 gold spans without `NAME_TITLE`; ONNX = `SuperClinical-Small-44M` at threshold 0.3; LLM = local `gemma-4-26b-a4b-it-8bit`), overlap recall in %:
+
+|Detectors|NAME|DATE|AGE|LOCATION|ID|CONTACT|Total|
+|---|---:|---:|---:|---:|---:|---:|---:|
+|regex|30.6|62.5|36.8|0.0|0.0|89.3|43.5|
+|llm|92.3|8.7|0.0|82.6|0.0|0.0|38.6|
+|regex+llm|94.8|62.5|36.8|82.6|0.0|89.3|70.5|
+|regex+onnx (int8)|96.9|81.8|73.7|87.2|3.4|92.9|82.7|
+|regex+onnx+llm (int8)|98.1|81.8|73.7|99.4|3.4|92.9|84.7|
+
+Strict precision is low for the ONNX settings (about 30-57 % total), mostly boundary mismatches and extra DATE/LOCATION spans; for a safety net with human review, recall is the number that counts. ID recall drops from 44 % (`onnx` alone) to 3 % when `regex` runs too: overlap resolution prefers the longer span, and recall is scored per kind group.
 
 ## Development
 

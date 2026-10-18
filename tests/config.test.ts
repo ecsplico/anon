@@ -70,7 +70,6 @@ describe('loadConfig', () => {
     expect(config.detectors.onnx.model).toBe(DEFAULT_CONFIG.detectors.onnx.model)
     expect(config.detectors.regex.entities).toEqual(['CONTACT_EMAIL'])
     expect(config.detectors.regex.enabled).toBe(true)
-    expect(DEFAULT_CONFIG.detectors.onnx.threshold).toBe(0.5)
   })
 
   test('~ is expanded in cacheDir and ledger.dir', () => {

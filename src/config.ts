@@ -63,10 +63,10 @@ export const DEFAULT_CONFIG: AnonConfig = {
     },
     onnx: {
       enabled: true,
-      model: 'OpenMed/OpenMed-PII-German-ClinicalE5-Small-33M-v1-onnx-android',
-      variant: 'int8',
+      model: 'OpenMed/OpenMed-PII-German-SuperClinical-Small-44M-v1-onnx-android',
+      variant: 'fp16',
       device: 'cpu',
-      threshold: 0.5,
+      threshold: 0.3,
       chunkChars: 900,
       localFilesOnly: false,
       cacheDir: '~/.cache/ecsplico-anon/models',

@@ -22,10 +22,10 @@ export type OnnxOptions = {
 }
 
 export const ONNX_DEFAULTS: Required<Omit<OnnxOptions, 'pipeline'>> = {
-  model: 'OpenMed/OpenMed-PII-German-ClinicalE5-Small-33M-v1-onnx-android',
-  variant: 'int8',
+  model: 'OpenMed/OpenMed-PII-German-SuperClinical-Small-44M-v1-onnx-android',
+  variant: 'fp16',
   device: 'cpu',
-  threshold: 0.5,
+  threshold: 0.3,
   // The model truncates silently at 512 tokens; German clinical prose is ~2.9 chars/token,
   // numbers and abbreviations tokenise denser, so 900 chars keeps a safe margin.
   chunkChars: 900,
