@@ -172,9 +172,14 @@ function globalPattern(p: RegExp): RegExp {
   return p.global ? new RegExp(p.source, p.flags) : new RegExp(p.source, p.flags + 'g')
 }
 
-export function applyRules(text: string, rules: Rule[]): { text: string; hits: Hit[] } {
-  type Cand = { start: number; end: number; rule: number }
-  const cands: Cand[] = []
+export type RuleHit = { start: number; end: number; /** Index into the `rules` array. */ rule: number }
+
+/**
+ * Non-overlapping rule matches, sorted by start. Longest match first, then earlier rule, then earlier start
+ * (the rule that `applyRules` applies).
+ */
+export function findRuleHits(text: string, rules: Rule[]): RuleHit[] {
+  const cands: RuleHit[] = []
   rules.forEach((r, i) => {
     const re = globalPattern(r.pattern)
     for (const m of text.matchAll(re)) {
@@ -185,7 +190,7 @@ export function applyRules(text: string, rules: Rule[]): { text: string; hits: H
   // Längster Treffer zuerst, dann frühere Regel, dann früherer Beginn
   cands.sort((a, b) => (b.end - b.start) - (a.end - a.start) || a.rule - b.rule || a.start - b.start)
   const taken = new Uint8Array(text.length)
-  const accepted: Cand[] = []
+  const accepted: RuleHit[] = []
   for (const c of cands) {
     let free = true
     for (let k = c.start; k < c.end; k++) {
@@ -195,7 +200,11 @@ export function applyRules(text: string, rules: Rule[]): { text: string; hits: H
     taken.fill(1, c.start, c.end)
     accepted.push(c)
   }
-  accepted.sort((a, b) => a.start - b.start)
+  return accepted.sort((a, b) => a.start - b.start)
+}
+
+export function applyRules(text: string, rules: Rule[]): { text: string; hits: Hit[] } {
+  const accepted = findRuleHits(text, rules)
 
   let out = ''
   let pos = 0
@@ -217,7 +226,7 @@ export type Candidate = {
   text: string
   kind: EntityKind
   placeholder?: string
-  source?: Extract<DetectorName, 'onnx' | 'llm' | 'manual'>
+  source?: Extract<DetectorName, 'regex' | 'onnx' | 'llm' | 'manual'>
 }
 
 /**

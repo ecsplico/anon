@@ -68,3 +68,10 @@ export {
 } from './ledger.ts'
 export type { Ledger, SaveLedgerInput } from './ledger.ts'
 
+export { AnonConfigSchema, DEFAULT_CONFIG, applyCliOverrides, expandHome, loadConfig } from './config.ts'
+export type { AnonConfig, CliFlags, LoadConfigOptions } from './config.ts'
+
+export { findRuleHits } from './rules.ts'
+export type { RuleHit } from './rules.ts'
+export { anonymize, buildDetectors, detect } from './pipeline.ts'
+export type { AnonymizeOptions, AnonymizeResult, DetectResult } from './pipeline.ts'
