@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import * as openmed from 'openmed'
+import { alignTokens } from '../src/detectors/align.ts'
 import { chunkRanges, ONNX_DEFAULTS, onnxCacheStatus, onnxDetector } from '../src/detectors/onnx.ts'
 import type { OpenmedModule, OpenmedSpan } from '../src/detectors/onnx.ts'
 import { ENTITY_KINDS } from '../src/types.ts'
@@ -296,7 +297,7 @@ describe('loading', () => {
       loadOnnxModel: async (id, o) => {
         loads++
         expect(id).toBe(ONNX_DEFAULTS.model)
-        expect(o).toEqual({ variant: 'int8', device: 'cpu', localFilesOnly: false })
+        expect(o).toEqual({ variant: 'int8', device: 'cpu', localFilesOnly: false, runtime: expect.anything() })
         return model
       },
       extractPii: async (_t, o) => { seen.push(o?.pipeline); return [] },
@@ -328,5 +329,126 @@ describe('onnxCacheStatus', () => {
 
     writeFileSync(path.join(dir, 'model.onnx'), '')
     expect(onnxCacheStatus({ model, variant: 'fp32', cacheDir })).toBe('hit')
+  })
+})
+
+// ---- offset alignment ---------------------------------------------------------------------
+
+type Tok = [word: string, label?: string]
+
+/** Raw Transformers.js output: no offsets, `[CLS]`/`[SEP]` around the tokens, `index` = sequence position. */
+function rawPipeline(tokens: Tok[]) {
+  const out = [['[CLS]', 'O'] as Tok, ...tokens, ['[SEP]', 'O'] as Tok].map(([word, label], index) => ({
+    entity: label ?? 'O',
+    score: 0.9,
+    index,
+    word,
+  }))
+  return async () => out
+}
+
+async function runRaw(text: string, tokens: Tok[], warn?: (m: string) => void, entities?: EntityKind[]) {
+  return onnxDetector({
+    loader: async () => openmed as unknown as OpenmedModule,
+    pipeline: rawPipeline(tokens),
+    onWarning: warn,
+    threshold: 0,
+    entities,
+  }).detect(text, { masked: text })
+}
+
+describe('offset alignment (tokens without offsets)', () => {
+  test('µg and m² before a name do not shift its offsets', async () => {
+    const text = 'Gabe von 5 µg und 3 m² Salbe an Anna Müller.'
+    const spans = await runRaw(text, [
+      ['gabe'], ['von'], ['5'], ['µ'], ['##g'], ['und'], ['3'], ['m'], ['##²'], ['sal'], ['##be'], ['an'],
+      ['anna', 'B-FIRSTNAME'], ['muller', 'B-LASTNAME'], ['.'],
+    ])
+    expect(spans).toHaveLength(1)
+    expect(spans[0]?.text).toBe('Anna Müller')
+    expect(text.slice(spans[0]?.start, spans[0]?.end)).toBe('Anna Müller')
+  })
+
+  test('NBSP between name parts and before the name', async () => {
+    const text = 'Frau\u00a0Anna\u00a0Müller kommt.'
+    const spans = await runRaw(text, [['frau'], ['anna', 'B-FIRSTNAME'], ['muller', 'B-LASTNAME'], ['kommt'], ['.']])
+    expect(spans.map((s) => s.text)).toEqual(['Anna\u00a0Müller'])
+  })
+
+  test('a soft hyphen inside a word (removed by the tokenizer) does not abort alignment', async () => {
+    const text = 'Eine Sachse\u00adSpaltung der Narbe, gesehen von Thomas Schneider.'
+    const warnings: string[] = []
+    const spans = await runRaw(
+      text,
+      [
+        ['eine'], ['sachs'], ['##es'], ['##pal'], ['##tung'], ['der'], ['nar'], ['##be'], [','], ['gesehen'], ['von'],
+        ['thomas', 'B-FIRSTNAME'], ['schneider', 'B-LASTNAME'], ['.'],
+      ],
+      (m) => warnings.push(m),
+    )
+    expect(spans.map((s) => s.text)).toEqual(['Thomas Schneider'])
+    expect(warnings).toEqual([])
+  })
+
+  test('zero-width space and control characters are skipped like the tokenizer does', async () => {
+    const text = 'Ab\u200bteilung\u0001 Leitung: Anna Müller'
+    const spans = await runRaw(text, [
+      ['ab'], ['##tei'], ['##lung'], ['leitung'], [':'], ['anna', 'B-FIRSTNAME'], ['muller', 'B-LASTNAME'],
+    ])
+    expect(spans.map((s) => s.text)).toEqual(['Anna Müller'])
+  })
+
+  test('[UNK] stands for the whole word: later tokens stay aligned and the word itself keeps its label', async () => {
+    const text = 'Kontakt 𝒳𝒴 mit Anna Müller, Zeichen 𝒵𝒲 ok.'
+    const spans = await runRaw(text, [
+      ['kontakt'], ['[UNK]', 'B-LASTNAME'], ['mit'], ['anna', 'B-FIRSTNAME'], ['muller', 'B-LASTNAME'], [','],
+      ['zeichen'], ['[UNK]'], ['ok'], ['.'],
+    ])
+    expect(spans.map((s) => s.text)).toEqual(['𝒳𝒴', 'Anna Müller'])
+  })
+
+  test('an unalignable token is reported as a warning, treated as O, and later names stay correct', async () => {
+    const text = 'Anna Müller und Thomas Schneider.'
+    const warnings: string[] = []
+    const spans = await runRaw(
+      text,
+      [
+        ['anna', 'B-FIRSTNAME'], ['muller', 'B-LASTNAME'], ['und'], ['zzzzqq', 'B-FIRSTNAME'],
+        ['thomas', 'B-FIRSTNAME'], ['schneider', 'B-LASTNAME'], ['.'],
+      ],
+      (m) => warnings.push(m),
+    )
+    expect(spans.map((s) => s.text)).toEqual(['Anna Müller', 'Thomas Schneider'])
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toContain('1 Token')
+  })
+
+  test('without an onWarning callback an unalignable token is silently dropped, not thrown', async () => {
+    const spans = await runRaw('Anna Müller', [['anna', 'B-FIRSTNAME'], ['muller', 'B-LASTNAME'], ['zzzzqq', 'B-CITY']])
+    expect(spans.map((s) => s.text)).toEqual(['Anna Müller'])
+  })
+
+  test('alignTokens: offsets are original UTF-16 positions, failures never move the cursor', () => {
+    const text = '😀 Zeit: 5 µg, Müller'
+    const { tokens, unaligned } = alignTokens(text, [
+      { word: '[CLS]', index: 0 },
+      { word: 'zeit', index: 1 },
+      { word: ':', index: 2 },
+      { word: 'nope', index: 3 },
+      { word: '5', index: 4 },
+      { word: 'µ', index: 5 },
+      { word: '##g', index: 6 },
+      { word: ',', index: 7 },
+      { word: 'muller', index: 8 },
+      { word: '[SEP]', index: 9 },
+    ])
+    expect(unaligned.map((t) => t.word)).toEqual(['nope'])
+    const sliced = tokens.map((t) => [t.word, text.slice(t.start, t.end)])
+    expect(sliced).toEqual([['zeit', 'Zeit'], [':', ':'], ['5', '5'], ['µ', 'µ'], ['##g', 'g'], [',', ','], ['muller', 'Müller']])
+  })
+
+  test('tokens that already carry offsets pass through untouched', () => {
+    const { tokens } = alignTokens('Anna Müller', [{ word: 'anna', start: 0, end: 4 }, { word: 'muller' }])
+    expect(tokens.map((t) => [t.start, t.end])).toEqual([[0, 4], [5, 11]])
   })
 })

@@ -3,6 +3,7 @@ import { homedir } from 'node:os'
 import path from 'node:path'
 import { kindGroup } from '../types.ts'
 import type { EntityKind, Span } from '../types.ts'
+import { alignedPipeline } from './align.ts'
 import type { DetectContext, Detector } from './types.ts'
 
 export type OnnxVariant = 'int8' | 'fp16' | 'fp32'
@@ -42,7 +43,7 @@ export type OpenmedModule = {
   extractPii(text: string, options?: { pipeline?: unknown; threshold?: number }): Promise<OpenmedSpan[]>
   loadOnnxModel(
     model: string,
-    options?: { variant?: OnnxVariant; device?: string; localFilesOnly?: boolean },
+    options?: { variant?: OnnxVariant; device?: string; localFilesOnly?: boolean; runtime?: unknown },
   ): Promise<unknown>
 }
 
@@ -57,6 +58,11 @@ export type OpenmedSpan = {
 export type OnnxDetectorOptions = Partial<OnnxOptions> & {
   /** Test injection: replaces `import('openmed')`. */
   loader?: () => Promise<OpenmedModule>
+  /**
+   * Called once per model call that left tokens without a place in the text (they are treated as
+   * label `O`; the document is still processed). The message carries counts only, never text.
+   */
+  onWarning?: (message: string) => void
 }
 
 const MISSING_PACKAGES =
@@ -231,6 +237,12 @@ export function onnxDetector(opts: OnnxDetectorOptions = {}): Detector {
 
   let ready: Promise<{ mod: OpenmedModule; pipeline: unknown }> | undefined
 
+  // Transformers.js emits tokens without offsets and openmed's own aligner throws on any token it
+  // cannot find, so every pipeline is wrapped by our aligner, which drops such tokens instead.
+  const report = ({ unaligned }: { unaligned: unknown[] }): void => {
+    opts.onWarning?.(`ONNX: ${unaligned.length} Token(s) ohne Textposition als O behandelt`)
+  }
+
   async function load(): Promise<{ mod: OpenmedModule; pipeline: unknown }> {
     let mod: OpenmedModule
     try {
@@ -238,18 +250,27 @@ export function onnxDetector(opts: OnnxDetectorOptions = {}): Detector {
     } catch {
       throw new Error(MISSING_PACKAGES)
     }
-    if (cfg.pipeline !== undefined) return { mod, pipeline: cfg.pipeline }
+    if (cfg.pipeline !== undefined) return { mod, pipeline: alignedPipeline(cfg.pipeline, report) }
+    let transformers: typeof import('@huggingface/transformers')
     try {
-      const { env } = await import('@huggingface/transformers')
-      env.cacheDir = cacheDir
+      transformers = await import('@huggingface/transformers')
+      transformers.env.cacheDir = cacheDir
     } catch {
       throw new Error(MISSING_PACKAGES)
+    }
+    // openmed's loader wraps whatever `runtime.pipeline` returns in its (throwing) aligner; ours
+    // already supplies offsets, so its pass-through branch is taken.
+    const runtime = {
+      env: transformers.env,
+      pipeline: async (...args: unknown[]) =>
+        alignedPipeline(await (transformers.pipeline as (...a: unknown[]) => Promise<unknown>)(...args), report),
     }
     try {
       const pipeline = await mod.loadOnnxModel(cfg.model, {
         variant: cfg.variant,
         device: cfg.device,
         localFilesOnly: cfg.localFilesOnly,
+        runtime,
       })
       return { mod, pipeline }
     } catch (e) {
