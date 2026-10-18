@@ -28,7 +28,7 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "anon": "./dist/cli.mjs"
+    "anon": "dist/cli.mjs"
   },
   "files": [
     "dist",
