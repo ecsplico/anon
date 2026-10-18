@@ -1,0 +1,7 @@
+node_modules
+dist
+.scratch
+.omp
+*.anon.*
+*.deanon.*
+eval/corpus/
